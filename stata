@@ -1,0 +1,173 @@
+reg aqi win temp humi press wind,r
+reg aqi win humi,r
+reg pm25 win temp humi press wind,r
+reg pm25 win temp humi wind,r
+reg pm10 win temp humi press wind,r
+reg pm10 win temp humi wind,r
+reg so2 win temp humi press wind,r
+reg so2 win temp humi wind,r
+reg co win temp humi press wind,r
+reg co win temp wind,r
+reg no2 win temp humi press wind,r
+reg no2 win wind,r
+
+DCdensity d,breakpoint(0) generate(Xj Yj r0 fhat se_fhat) graphname(rd.eps)
+
+rd temp d,gr mbw(100) kernel(rectangle)
+rd humi d,gr mbw(100) kernel(rectangle)
+rd press d,gr mbw(100) kernel(rectangle)
+rd wind d,gr mbw(100) kernel(rectangle)
+
+rd aqi d,gr mbw(100 120) cov(temp humi press wind) 
+rd pm25 d,gr mbw(100 120) cov(temp humi press wind)
+rd pm10 d,gr mbw(100 120) cov(temp humi press wind) 
+rd so2 d,gr mbw(100 120) cov(temp humi press wind) 
+rd co d,gr mbw(100 120) cov(temp humi press wind) 
+rd no2 d,gr mbw(100 120) cov(temp humi press wind) 
+
+rd aqi d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+rd pm25 d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+rd pm10 d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+rd so2 d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+rd co d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+rd no2 d,gr mbw(100) cov(temp humi press wind) kernel(rectangle)
+
+gen d2=d^2
+gen d3=d^3
+gen d4=d^4
+
+reg temp win##c.(d d2),vce(robust)
+reg humi win##c.(d d2),vce(robust)
+reg press win##c.(d d2),vce(robust)
+reg wind win##c.(d d2),vce(robust)
+
+DCdensity d,breakpoint(0) generate(Xj Yj r0 fhat se_fhat) graphname(rd.eps)
+
+eststo m1:reg aqi win##c.d temp wind humi press,vce(robust)
+eststo m2:reg aqi win##c.(d d2) temp wind humi press,vce(robust)
+eststo m3:reg aqi win##c.(d d2 d3) temp wind humi press,vce(robust)
+eststo m4:reg aqi win##c.(d d2 d3 d4)temp wind humi press,vce(robust)
+esttab m1 m2 m3 m4 using lpr.rtf,star(* .10 * * .05 * * * .01)nogap replace///
+mtitle("p=1""p=2""p=3""p=4")se(%5.4f)ar2 aic(%10.4f) bic(%10.4f)///
+drop(0b.d ob.d)
+
+library(rdrobust)         
+lee <- read.csv("D:/lee.csv")
+lee
+
+Lee_2 <- lee[lee$margin >= -0.5 & lee$margin <= 0.5,]
+
+# Figure 9.12 using data Lee_2 in Page218 结果变量与参考变量关系图，看出在断点处有明显跳跃
+rdplot(y = Lee_2$vote, x = Lee_2$margin, nbins=50, p=2,      # Defult is p=4 
+        x.lim=c(-0.5,0.5),
+        y.lim=c(0.2,0.8),col.lines ="black",
+        x.label = 'Democratic Vote Share Margin of Victory, Election t',
+        y.label = 'Vote Share, Election t+1')
+
+#对参考变量进行McCrary检验，跳跃在断点处不显著，说明个体没有精确控制断点的能力
+
+# Figure 9.8 in Page 206 and code edited by stata in Page219. 最优带宽选取
+rdbwselect_2014(y = Lee_2$vote, x = Lee_2$margin, c=0, 
+                kernel = "uniform", bwselect = "CV", 
+                cvgrid_min = 0.1, cvgrid_max = 0.5, cvplot = TRUE)
+                # use rdbwselect_2014 rather rdbwselect
+                # Result shows the best bindwith is 0.28
+
+# Replicat the Result in Page220限制在最优带宽内，分别进行局部平均法和局部线性回归法
+Lee_1 <- lee[lee$margin >= -0.28 & lee$margin <= 0.28,]
+Lee_1 
+Lee_1$dd <- ifelse(Lee_1$margin>0,Lee_1$d <- 1,Lee_1$d <- 0)   # Creat Rdd
+Lee_1$dd
+summary(lm(vote~dd,data=Lee_1))                            #Result of Colume1
+summary(lm(vote~dd+margin+I(dd*margin),data=Lee_1))        #Result in Colume2
+
+# Replicat the Result in Page221使用全部样本，重新估计，通过建立局部多项式选择最优模型
+Lee_2 <- lee[lee$margin >= -0.5 & lee$margin <= 0.5,]
+Lee_2$dd <- ifelse(Lee_2$margin>0,Lee_2$d <- 1,Lee_2$d <- 0)   # Creat Rdd
+summary(lm(vote~dd+margin+I(dd*margin),data=Lee_2))            # Result of Colume1
+AIC(lm(vote~dd+margin+I(dd*margin),data=Lee_2))
+BIC(lm(vote~dd+margin+I(dd*margin),data=Lee_2))
+summary(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))  # Result of Colume2
+AIC(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))
+summary(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))  # Result of Colume3
+AIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))
+summary(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))  # Result of Colume4
+AIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))
+
+
+
+
+################################################
+
+library(rdrobust)         
+air<- read.csv("D:/断点2.csv")
+air
+
+library(rdrobust)         
+air<- read.csv("D:/rd000.csv")
+air
+
+
+Lee_2 <- lee[lee$margin >= -0.5 & lee$margin <= 0.5,]
+
+# Figure 9.12 using data Lee_2 in Page218 结果变量与参考变量关系图，看出在断点处有明显跳跃
+rdplot(y = air$aqi, x = air$d,       # Defult is p=4 
+        col.lines ="black",
+        x.label = 'Election t',
+        y.label = 'AQI, Election t+1')
+
+#对参考变量进行McCrary检验，跳跃在断点处不显著，说明个体没有精确控制断点的能力
+
+# Figure 9.8 in Page 206 and code edited by stata in Page219. 最优带宽选取
+rdbwselect_2014(y = air$pm10, x = air$d, c=0, 
+                kernel = "uniform", bwselect = "CV", 
+                cvgrid_min = 1, cvgrid_max =19, cvplot = TRUE)
+                # use rdbwselect_2014 rather rdbwselect
+                # Result shows the best bindwith is 0.28
+
+# Replicat the Result in Page220限制在最优带宽内，分别进行局部平均法和局部线性回归法
+air1<- air[air$d>= -16.3& air$d<=16.3,]
+air1
+air1$dd <- ifelse(air1$d>=0,air1$x<- 1,air1$x<- 0)   # Creat Rdd
+air1$dd
+summary(lm(aqi~dd,data=air1))                            #Result of Colume1
+summary(lm(aqi~dd+d+I(dd*d),data=air1))        #Result in Colume2
+rd1<-lm(aqi~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd1) 
+rd2<-lm(pm2.5~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd2) 
+rd2<-lm(pm10~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd2) 
+rd2<-lm(so2~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd2) 
+rd2<-lm(co~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd2)
+rd2<-lm(no2~dd+d+I(dd*d)+air1$temp+air1$humi+air1$press+air1$wind,data=air1)
+summary(rd2)
+# Replicat the Result in Page221使用全部样本，重新估计，通过建立局部多项式选择最优模型
+Lee_2 <- lee[lee$margin >= -0.5 & lee$margin <= 0.5,]
+air$dd <- ifelse(air$d>=0,air$x<- 1,air$x<- 0)   # Creat Rdd
+rd1<-lm(aqi~dd+d+I(dd*d)+air$temp+air$humi+air$press+air$wind,data=air)
+summary(rd1)            # Result of Colume1
+AIC(rd1)
+BIC(rd1)
+summary(lm(pm10~dd+d+I(dd*d)+air$temp+air$humi+air$press+air$wind,data=air))
+rd2<-lm(aqi~dd+d+I(d^2)+I(dd*d)+I(dd*d^2)+air$temp+air$humi+air$press+air$wind,data=air)
+summary(rd2)  
+AIC(rd2)
+BIC(rd2)
+summary(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))  # Result of Colume2
+AIC(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(dd*margin)+I(dd*margin^2),data=Lee_2))
+summary(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))  # Result of Colume3
+AIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3),data=Lee_2))
+summary(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))  # Result of Colume4
+AIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))
+BIC(lm(vote~dd+margin+I(margin^2)+I(margin^3)+I(dd*margin)+I(dd*margin^2)+I(dd*margin^3)+I(dd*margin^4)+I(dd*margin^4),data=Lee_2))
+
+
+
